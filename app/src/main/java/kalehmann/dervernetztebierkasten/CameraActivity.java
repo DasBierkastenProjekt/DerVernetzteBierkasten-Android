@@ -1,8 +1,10 @@
 package kalehmann.dervernetztebierkasten;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -15,11 +17,18 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.hardware.Camera;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.SeekBar;
+import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
 import java.io.FileOutputStream;
 
 public class CameraActivity extends Activity implements Runnable, Camera.PictureCallback,
@@ -31,20 +40,21 @@ public class CameraActivity extends Activity implements Runnable, Camera.Picture
     private Button bCapture;
     private float circle_size = 0.8f;
     private SeekBar mSeekbar;
+    private static final int CAMERA_PERMISSION_CODE = 100;
 
     @Override
-    public void onProgressChanged (SeekBar seekBar, int progress, boolean fromUser) {
+    public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
         circle_size = progress / 100.0f;
         this.generateOverlay();
     }
 
     @Override
-    public void onStopTrackingTouch (SeekBar seekBar) {
+    public void onStopTrackingTouch(SeekBar seekBar) {
 
     }
 
     @Override
-    public void onStartTrackingTouch (SeekBar seekBar) {
+    public void onStartTrackingTouch(SeekBar seekBar) {
 
     }
 
@@ -57,18 +67,18 @@ public class CameraActivity extends Activity implements Runnable, Camera.Picture
 
     protected Bitmap getSubBitmap(Bitmap bm) {
         /* This method returns a squared bitmap from the center of bm. The size of the new bitmap
-        *  will be the shorter side of the old bitmap * circle_size. */
+         *  will be the shorter side of the old bitmap * circle_size. */
 
         int[] old_size = {bm.getWidth(), bm.getHeight()};
         // Image is in landscape at this point
         int[] new_size;
         if (old_size[0] > old_size[1]) {
             // Landscape
-            new_size = new int[] {Math.round(old_size[1] * circle_size),
+            new_size = new int[]{Math.round(old_size[1] * circle_size),
                     Math.round(old_size[1] * circle_size)};
         } else {
             // Portrait
-            new_size = new int[] {Math.round(old_size[0] * circle_size),
+            new_size = new int[]{Math.round(old_size[0] * circle_size),
                     Math.round(old_size[0] * circle_size)};
         }
         int[] offset = {(old_size[0] - new_size[0]) / 2, (old_size[1] - new_size[1]) / 2};
@@ -159,15 +169,20 @@ public class CameraActivity extends Activity implements Runnable, Camera.Picture
         generateOverlay();
     }
 
-    public Camera getCameraInstance(){
-        Camera c = null;
-        try {
-            c = Camera.open(); // attempt to get a Camera instance
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        if (requestCode != CAMERA_PERMISSION_CODE) {
+            return;
         }
-        catch (Exception e){
-            // Camera is not available (in use or does not exist)
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+           this.initCam();
         }
-        return c; // returns null if camera is unavailable
+        Toast.makeText(this, "Camera Permission Denied", Toast.LENGTH_SHORT)
+            .show();
     }
 
     @Override
@@ -178,6 +193,23 @@ public class CameraActivity extends Activity implements Runnable, Camera.Picture
         Intent intent = getIntent();
         f_name = intent.getStringExtra("f_name");
 
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.CAMERA}, CAMERA_PERMISSION_CODE);
+        } else {
+            this.initCam();
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (mCamera != null) {
+            mCamera.release();
+        }
+    }
+
+    private void initCam()
+    {
         mCamera = getCameraInstance();
         mCamera.setDisplayOrientation(90);
         Camera.Parameters mCameraParameters = mCamera.getParameters();
@@ -196,12 +228,15 @@ public class CameraActivity extends Activity implements Runnable, Camera.Picture
         mSeekbar.setOnSeekBarChangeListener(this);
     }
 
-    @Override
-    protected void onPause() {
-        super.onPause();
-        if (mCamera != null) {
-            mCamera.release();
-        }
-    }
+    private Camera getCameraInstance() {
+        Camera c = null;
 
+        try {
+            c = Camera.open(0); // attempt to get a Camera instance
+        } catch (Exception e) {
+            String x = e.toString();
+            // Camera is not available (in use or does not exist)
+        }
+        return c; // returns null if camera is unavailable
+    }
 }
